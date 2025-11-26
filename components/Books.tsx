@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Book, AppSettings, BookFormat, ClassSector } from '../types';
-import { Edit, Trash2, Tag, Book as BookIcon, Plus, X, Printer, Search, Upload } from 'lucide-react';
+import { Book, AppSettings, BookFormat, ClassSector, User, UserRole, Loan } from '../types';
+import { Edit, Trash2, Tag, Book as BookIcon, Plus, X, Printer, Search, Upload, ZoomIn, ArrowUpRight, Save, Calendar } from 'lucide-react';
 import * as Storage from '../services/storage';
 
 interface BooksProps {
@@ -11,9 +11,13 @@ interface BooksProps {
   formats: BookFormat[];
   onUpdateFormats: (formats: BookFormat[]) => void;
   classes: ClassSector[];
+  currentUser: User | null;
+  users: User[];
+  loans: Loan[];
+  onUpdateLoans: (loans: Loan[]) => void;
 }
 
-const Books: React.FC<BooksProps> = ({ books, onUpdate, settings, formats, onUpdateFormats, classes }) => {
+const Books: React.FC<BooksProps> = ({ books, onUpdate, settings, formats, onUpdateFormats, classes, currentUser, users, loans, onUpdateLoans }) => {
   const [view, setView] = useState<'list' | 'form' | 'formats'>('list');
   const [formData, setFormData] = useState<Partial<Book>>({});
   
@@ -31,8 +35,19 @@ const Books: React.FC<BooksProps> = ({ books, onUpdate, settings, formats, onUpd
   // Search API State
   const [isSearching, setIsSearching] = useState(false);
 
+  // Zoom State
+  const [hoveredImage, setHoveredImage] = useState<string | null>(null);
+
+  // Quick Loan State
+  const [loanModalBook, setLoanModalBook] = useState<Book | null>(null);
+  const [loanUserId, setLoanUserId] = useState('');
+  const [loanDate, setLoanDate] = useState(new Date().toISOString().split('T')[0]);
+  const [loanDueDate, setLoanDueDate] = useState('');
+
   // File Upload Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isAdmin = currentUser?.role === UserRole.ADMIN;
 
   // Update categories if settings change externally
   useEffect(() => {
@@ -169,57 +184,173 @@ const Books: React.FC<BooksProps> = ({ books, onUpdate, settings, formats, onUpd
     }
   };
 
+  const handlePrintLabels = () => {
+    const printWindow = window.open('', '', 'height=600,width=900');
+    if (printWindow) {
+        printWindow.document.write('<html><head><title>Etiquetas de Lombada</title>');
+        printWindow.document.write(`
+            <style>
+                body { font-family: sans-serif; padding: 10px; }
+                .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+                .label { 
+                    border: 1px dashed #000; 
+                    padding: 5px; 
+                    text-align: center; 
+                    height: 100px; 
+                    display: flex; 
+                    flex-direction: column; 
+                    justify-content: center; 
+                    align-items: center;
+                    page-break-inside: avoid;
+                }
+                .cat { font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }
+                .shelf { font-size: 18px; font-weight: bold; margin: 5px 0; }
+                .author { font-size: 10px; text-transform: uppercase; }
+            </style>
+        `);
+        printWindow.document.write('</head><body>');
+        
+        printWindow.document.write('<div class="grid">');
+        books.forEach(book => {
+            const authorCode = book.author.split(' ').pop()?.substring(0, 3) || '';
+            printWindow.document.write(`
+                <div class="label">
+                    <span class="cat">${book.category}</span>
+                    <span class="shelf">${book.shelf}</span>
+                    <span class="author">${authorCode}</span>
+                </div>
+            `);
+        });
+        printWindow.document.write('</div>');
+        
+        printWindow.document.write('</body></html>');
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 500);
+    }
+  };
+
+  const handleQuickLoanSave = () => {
+      if (!loanModalBook || !loanUserId || !loanDueDate) return;
+
+      const user = users.find(u => u.id === loanUserId);
+      if (!user) return;
+
+      // Inventory Check
+      if (loanModalBook.available <= 0) {
+          alert("Este livro não possui exemplares disponíveis.");
+          return;
+      }
+
+      const newLoan: Loan = {
+          id: Date.now().toString(),
+          userId: user.id,
+          userName: user.name,
+          bookId: loanModalBook.id,
+          bookTitle: loanModalBook.title,
+          loanDate: loanDate,
+          dueDate: loanDueDate,
+          status: 'Emprestado'
+      };
+
+      // Save Loan
+      const updatedLoans = [...loans, newLoan];
+      Storage.saveCollection('loans', updatedLoans);
+      onUpdateLoans(updatedLoans);
+
+      // Update Book Inventory
+      const updatedBooks = books.map(b => 
+          b.id === loanModalBook.id ? { ...b, available: b.available - 1 } : b
+      );
+      Storage.saveCollection('books', updatedBooks);
+      onUpdate(updatedBooks);
+
+      alert(`Empréstimo de "${loanModalBook.title}" registrado com sucesso!`);
+      setLoanModalBook(null);
+      setLoanUserId('');
+      setLoanDueDate('');
+  };
+
+  const openLoanModal = (book: Book) => {
+      setLoanModalBook(book);
+      if (!isAdmin && currentUser) {
+          setLoanUserId(currentUser.id);
+      } else {
+          setLoanUserId('');
+      }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in relative">
         <div className="flex flex-col space-y-2">
-            <h2 className="text-xl font-medium text-gray-600">Cadastrar/Editar/Listar Acervos</h2>
+            <h2 className="text-xl font-medium text-gray-600">
+                {isAdmin ? 'Cadastrar/Editar/Listar Acervos' : 'Acervo da Biblioteca'}
+            </h2>
             <div className="flex flex-wrap gap-2">
-            <button 
-                onClick={() => { setFormData({}); setView('form'); }}
-                className={`px-4 py-2 rounded text-white text-sm font-medium ${view === 'form' ? 'bg-teal-600' : 'bg-primary hover:bg-primaryDark'}`}
-            >
-                Novo Cadastro
-            </button>
-            <button 
-                onClick={() => setView('list')}
-                className={`px-4 py-2 rounded text-white text-sm font-medium ${view === 'list' ? 'bg-blue-700' : 'bg-secondary hover:bg-blue-600'}`}
-            >
-                Tabela Acervos
-            </button>
-            <button 
-                onClick={() => setShowCategoryModal(true)}
-                className="px-4 py-2 rounded text-white text-sm font-medium bg-cyan-500 hover:bg-cyan-600"
-            >
-                Nova Categoria
-            </button>
-            <button 
-                onClick={() => setView('formats')}
-                className={`px-4 py-2 rounded text-white text-sm font-medium ${view === 'formats' ? 'bg-red-600' : 'bg-red-500 hover:bg-red-600'}`}
-            >
-                Formato
-            </button>
+                {isAdmin && (
+                    <button 
+                        onClick={() => { setFormData({}); setView('form'); }}
+                        className={`px-4 py-2 rounded text-white text-sm font-medium ${view === 'form' ? 'bg-teal-600' : 'bg-primary hover:bg-primaryDark'}`}
+                    >
+                        Novo Cadastro
+                    </button>
+                )}
+                <button 
+                    onClick={() => setView('list')}
+                    className={`px-4 py-2 rounded text-white text-sm font-medium ${view === 'list' ? 'bg-blue-700' : 'bg-secondary hover:bg-blue-600'}`}
+                >
+                    Tabela Acervos
+                </button>
+                {isAdmin && (
+                    <>
+                        <button 
+                            onClick={() => setShowCategoryModal(true)}
+                            className="px-4 py-2 rounded text-white text-sm font-medium bg-cyan-500 hover:bg-cyan-600"
+                        >
+                            Nova Categoria
+                        </button>
+                        <button 
+                            onClick={() => setView('formats')}
+                            className={`px-4 py-2 rounded text-white text-sm font-medium ${view === 'formats' ? 'bg-red-600' : 'bg-red-500 hover:bg-red-600'}`}
+                        >
+                            Formato
+                        </button>
+                    </>
+                )}
             </div>
         </div>
 
       {view === 'list' && (
-        <div className="bg-white rounded shadow-sm border border-gray-200">
+        <div className="bg-white rounded shadow-sm border border-gray-200 relative">
+             {/* Zoom Overlay */}
+             {hoveredImage && (
+                 <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white p-2 rounded-lg shadow-2xl border border-gray-200 animate-fade-in pointer-events-none">
+                     <img src={hoveredImage} alt="Zoom" className="max-h-[500px] max-w-[400px] object-contain rounded" />
+                 </div>
+             )}
+
              <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t">
              <h3 className="text-lg text-gray-600">Tabela de Acervos Cadastrados</h3>
-             <div className="flex gap-2">
-                <button 
-                    onClick={() => setShowLabelsModal(true)}
-                    className="bg-yellow-400 text-white px-3 py-1 rounded text-sm hover:bg-yellow-500 flex items-center"
-                >
-                    <Tag size={16} className="mr-1"/> Gerar Etiquetas
-                </button>
-                <button className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">Salvar Excel</button>
-             </div>
+             {isAdmin && (
+                 <div className="flex gap-2">
+                    <button 
+                        onClick={() => setShowLabelsModal(true)}
+                        className="bg-yellow-400 text-white px-3 py-1 rounded text-sm hover:bg-yellow-500 flex items-center"
+                    >
+                        <Tag size={16} className="mr-1"/> Gerar Etiquetas
+                    </button>
+                    <button className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">Salvar Excel</button>
+                 </div>
+             )}
           </div>
           <div className="p-4 overflow-x-auto">
             <table className="w-full text-sm text-left text-gray-600">
                 <thead className="text-xs text-gray-700 uppercase bg-gray-100">
                     <tr>
-                        <th className="px-4 py-3 text-center"><input type="checkbox"/></th>
+                        {isAdmin && <th className="px-4 py-3 text-center"><input type="checkbox"/></th>}
                         <th className="px-4 py-3">Capa</th>
                         <th className="px-4 py-3">Título</th>
                         <th className="px-4 py-3">Categoria</th>
@@ -231,16 +362,24 @@ const Books: React.FC<BooksProps> = ({ books, onUpdate, settings, formats, onUpd
                         {settings.bookColumns.shelf && <th className="px-4 py-3">Estante</th>}
                         {settings.bookColumns.shelfLocation && <th className="px-4 py-3">Prateleira</th>}
                         {settings.bookColumns.knowledgeArea && <th className="px-4 py-3">Área de Conhecimento</th>}
-                        <th className="px-4 py-3">Ações</th>
+                        <th className="px-4 py-3 text-center">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
                     {books.map((book) => (
                         <tr key={book.id} className="bg-white border-b hover:bg-gray-50">
-                            <td className="px-4 py-3 text-center"><input type="checkbox"/></td>
+                            {isAdmin && <td className="px-4 py-3 text-center"><input type="checkbox"/></td>}
                             <td className="px-4 py-3">
-                                <div className="w-8 h-12 bg-gray-200 flex items-center justify-center rounded overflow-hidden">
-                                    {book.coverUrl ? <img src={book.coverUrl} className="w-full h-full object-cover" /> : <BookIcon size={16} className="text-gray-400"/>}
+                                <div 
+                                    className="w-8 h-12 bg-gray-200 flex items-center justify-center rounded overflow-hidden cursor-zoom-in relative group"
+                                    onMouseEnter={() => book.coverUrl && setHoveredImage(book.coverUrl)}
+                                    onMouseLeave={() => setHoveredImage(null)}
+                                >
+                                    {book.coverUrl ? (
+                                        <img src={book.coverUrl} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <BookIcon size={16} className="text-gray-400"/>
+                                    )}
                                 </div>
                             </td>
                             <td className="px-4 py-3 font-medium">{book.title}</td>
@@ -249,14 +388,26 @@ const Books: React.FC<BooksProps> = ({ books, onUpdate, settings, formats, onUpd
                             {settings.bookColumns.author && <td className="px-4 py-3">{book.author}</td>}
                             {settings.bookColumns.year && <td className="px-4 py-3">{book.year}</td>}
                             {settings.bookColumns.isbn && <td className="px-4 py-3">{book.isbn}</td>}
-                            {settings.bookColumns.quantity && <td className="px-4 py-3">{book.quantity}</td>}
+                            {settings.bookColumns.quantity && <td className="px-4 py-3">{book.quantity} (Disp: {book.available})</td>}
                             {settings.bookColumns.shelf && <td className="px-4 py-3">{book.shelf}</td>}
                             {settings.bookColumns.shelfLocation && <td className="px-4 py-3">{book.shelfLocation}</td>}
                             {settings.bookColumns.knowledgeArea && <td className="px-4 py-3">{book.knowledgeArea}</td>}
-                            <td className="px-4 py-3">
-                                <div className="flex space-x-1">
-                                    <button onClick={() => handleEdit(book)} className="p-1.5 bg-yellow-400 text-white rounded hover:bg-yellow-500"><Edit size={14}/></button>
-                                    <button onClick={() => handleDelete(book.id)} className="p-1.5 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={14}/></button>
+                            <td className="px-4 py-3 text-center">
+                                <div className="flex justify-center space-x-1">
+                                    <button 
+                                        onClick={() => openLoanModal(book)} 
+                                        className={`p-1.5 rounded text-white ${book.available > 0 ? 'bg-teal-500 hover:bg-teal-600' : 'bg-gray-400 cursor-not-allowed'}`}
+                                        title={isAdmin ? "Registrar Empréstimo" : "Solicitar Empréstimo"}
+                                        disabled={book.available <= 0}
+                                    >
+                                        <ArrowUpRight size={14}/>
+                                    </button>
+                                    {isAdmin && (
+                                        <>
+                                            <button onClick={() => handleEdit(book)} className="p-1.5 bg-yellow-400 text-white rounded hover:bg-yellow-500"><Edit size={14}/></button>
+                                            <button onClick={() => handleDelete(book.id)} className="p-1.5 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={14}/></button>
+                                        </>
+                                    )}
                                 </div>
                             </td>
                         </tr>
@@ -267,7 +418,7 @@ const Books: React.FC<BooksProps> = ({ books, onUpdate, settings, formats, onUpd
         </div>
       )}
 
-      {view === 'formats' && (
+      {view === 'formats' && isAdmin && (
           <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
              <h3 className="text-lg font-medium text-gray-700 mb-6 border-b pb-2">Inserir Novo Formato de Acervo</h3>
              <div className="flex gap-2 mb-8 items-end">
@@ -308,7 +459,7 @@ const Books: React.FC<BooksProps> = ({ books, onUpdate, settings, formats, onUpd
           </div>
       )}
 
-      {view === 'form' && (
+      {view === 'form' && isAdmin && (
         <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
              <h3 className="text-lg font-medium text-gray-700 mb-6 border-b pb-2">{formData.id ? 'Editar' : 'Inserir Novo'} Cadastro</h3>
              
@@ -493,6 +644,81 @@ const Books: React.FC<BooksProps> = ({ books, onUpdate, settings, formats, onUpd
         </div>
       )}
 
+      {/* Quick Loan Modal */}
+      {loanModalBook && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl animate-fade-in">
+                  <div className="flex justify-between items-center mb-4 border-b pb-2">
+                      <h3 className="text-lg font-medium text-gray-700 flex items-center">
+                          <ArrowUpRight className="mr-2 text-teal-600" /> {isAdmin ? 'Registrar Empréstimo' : 'Solicitar Empréstimo'}
+                      </h3>
+                      <button onClick={() => setLoanModalBook(null)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
+                  </div>
+                  
+                  <div className="mb-4">
+                      <div className="flex items-start space-x-3 bg-teal-50 p-3 rounded mb-4">
+                          {loanModalBook.coverUrl ? (
+                              <img src={loanModalBook.coverUrl} className="w-12 h-16 object-cover rounded" alt="Capa" />
+                          ) : (
+                              <BookIcon size={32} className="text-teal-300" />
+                          )}
+                          <div>
+                              <p className="font-bold text-gray-800 text-sm">{loanModalBook.title}</p>
+                              <p className="text-xs text-gray-500">{loanModalBook.author}</p>
+                              <p className="text-xs text-teal-600 mt-1">Disponíveis: {loanModalBook.available}</p>
+                          </div>
+                      </div>
+
+                      <div className="space-y-3">
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Selecione o Usuário</label>
+                              <select 
+                                  className="w-full border p-2 rounded bg-white text-gray-700 focus:ring-2 focus:ring-teal-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                                  value={loanUserId}
+                                  onChange={e => setLoanUserId(e.target.value)}
+                                  disabled={!isAdmin}
+                              >
+                                  <option value="">Selecione...</option>
+                                  {users.map(u => <option key={u.id} value={u.id}>{u.name} - {u.type}</option>)}
+                              </select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Data Empréstimo</label>
+                                  <input 
+                                      type="date"
+                                      className="w-full border p-2 rounded bg-white text-gray-700"
+                                      value={loanDate}
+                                      onChange={e => setLoanDate(e.target.value)}
+                                  />
+                              </div>
+                              <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Data Devolução</label>
+                                  <input 
+                                      type="date"
+                                      className="w-full border p-2 rounded bg-white text-gray-700"
+                                      value={loanDueDate}
+                                      onChange={e => setLoanDueDate(e.target.value)}
+                                  />
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                      <button onClick={() => setLoanModalBook(null)} className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-50">Cancelar</button>
+                      <button 
+                        onClick={handleQuickLoanSave} 
+                        disabled={!loanUserId || !loanDueDate}
+                        className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50 flex items-center"
+                      >
+                          <Save size={16} className="mr-1"/> Confirmar
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* Category Modal */}
       {showCategoryModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -542,7 +768,7 @@ const Books: React.FC<BooksProps> = ({ books, onUpdate, settings, formats, onUpd
                   </div>
 
                   <div className="mt-4 flex justify-end">
-                      <button onClick={() => window.print()} className="bg-primary text-white px-4 py-2 rounded flex items-center hover:bg-primaryDark">
+                      <button onClick={handlePrintLabels} className="bg-primary text-white px-4 py-2 rounded flex items-center hover:bg-primaryDark">
                           <Printer size={16} className="mr-2"/> Imprimir Etiquetas
                       </button>
                   </div>

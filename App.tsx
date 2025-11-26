@@ -70,14 +70,15 @@ const App: React.FC = () => {
           activeLoans: loans.filter(l => l.status === 'Emprestado' || l.status === 'Atrasado').length,
           totalEbooks: assets.length
         };
-        return <Dashboard stats={stats} loans={loans} onNavigate={setCurrentPage} />;
+        return <Dashboard stats={stats} loans={loans} onNavigate={setCurrentPage} user={currentUser} />;
       case 'loans':
         return <Loans 
             loans={loans} 
             books={books} 
             users={users} 
             onUpdateLoans={setLoans} 
-            onUpdateBooks={setBooks} 
+            onUpdateBooks={setBooks}
+            currentUser={currentUser}
         />;
       case 'books':
         return <Books 
@@ -87,6 +88,10 @@ const App: React.FC = () => {
             formats={formats}
             onUpdateFormats={setFormats}
             classes={classes}
+            currentUser={currentUser}
+            users={users}
+            loans={loans}
+            onUpdateLoans={setLoans}
         />;
       case 'users':
         return <Users users={users} settings={settings} currentUser={currentUser} />;
@@ -97,9 +102,14 @@ const App: React.FC = () => {
       case 'profile':
         return <Profile user={currentUser!} onUpdateUser={setCurrentUser} />;
       case 'classes':
-        return <Classes classes={classes} onUpdate={setClasses} />;
+        return <Classes 
+            classes={classes} 
+            onUpdate={setClasses} 
+            currentUser={currentUser}
+            onUpdateUser={setCurrentUser}
+        />;
       case 'digital':
-        return <DigitalAssets assets={assets} onUpdate={setAssets} />;
+        return <DigitalAssets assets={assets} onUpdate={setAssets} currentUser={currentUser} />;
       default:
         return (
             <div className="flex flex-col items-center justify-center h-full text-gray-400">
@@ -109,30 +119,6 @@ const App: React.FC = () => {
         );
     }
   };
-
-  // Force Password Change Screen
-  if (isAuthenticated && currentUser?.mustChangePassword) {
-      return (
-          <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-              <div className="bg-white p-8 rounded shadow-xl w-full max-w-md">
-                  <h2 className="text-xl font-bold text-red-600 mb-4">Troca de Senha Obrigatória</h2>
-                  <p className="text-gray-600 mb-6 text-sm">Por medidas de segurança, você precisa alterar sua senha padrão antes de continuar.</p>
-                  <Profile 
-                    user={currentUser} 
-                    onUpdateUser={(u) => {
-                        const updated = { ...u, mustChangePassword: false };
-                        setCurrentUser(updated);
-                        // Also update in users list logic handled inside Profile but state needs sync
-                        const usersList = Storage.getCollection('users', []);
-                        const newUsersList = usersList.map(usr => usr.id === u.id ? updated : usr);
-                        Storage.saveCollection('users', newUsersList);
-                        setUsers(newUsersList);
-                    }} 
-                  />
-              </div>
-          </div>
-      )
-  }
 
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;

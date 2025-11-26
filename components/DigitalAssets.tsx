@@ -1,22 +1,36 @@
 
-import React, { useState } from 'react';
-import { DigitalAsset } from '../types';
-import { Edit, Trash2, Plus, ExternalLink, FileText, Headphones, Book, Search, Download } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { DigitalAsset, User, UserRole, ExternalLibrary } from '../types';
+import { Edit, Trash2, Plus, ExternalLink, FileText, Headphones, Book, Search, Download, Upload, Link as LinkIcon, X } from 'lucide-react';
 import * as Storage from '../services/storage';
 
 interface DigitalAssetsProps {
   assets: DigitalAsset[];
   onUpdate: (assets: DigitalAsset[]) => void;
+  currentUser: User | null;
 }
 
-const DigitalAssets: React.FC<DigitalAssetsProps> = ({ assets, onUpdate }) => {
+const DigitalAssets: React.FC<DigitalAssetsProps> = ({ assets, onUpdate, currentUser }) => {
   const [view, setView] = useState<'list' | 'form' | 'search'>('list');
   const [formData, setFormData] = useState<Partial<DigitalAsset>>({});
   
+  // Libraries State
+  const [libraries, setLibraries] = useState<ExternalLibrary[]>([]);
+  const [newLibName, setNewLibName] = useState('');
+  const [newLibUrl, setNewLibUrl] = useState('');
+
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isAdmin = currentUser?.role === UserRole.ADMIN;
+
+  useEffect(() => {
+      setLibraries(Storage.getCollection('external_libraries', []));
+  }, []);
 
   const handleSave = () => {
     if (!formData.title || !formData.url) return;
@@ -51,6 +65,23 @@ const DigitalAssets: React.FC<DigitalAssetsProps> = ({ assets, onUpdate }) => {
       }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Limite de 5MB para evitar sobrecarga do LocalStorage
+      if (file.size > 5 * 1024 * 1024) {
+          alert("O arquivo é muito grande para o sistema local (Máximo 5MB). Recomendamos hospedar em nuvem (Google Drive) e usar o link.");
+          return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, url: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleOnlineSearch = async () => {
       if (!searchQuery) return;
       setIsSearching(true);
@@ -67,6 +98,32 @@ const DigitalAssets: React.FC<DigitalAssetsProps> = ({ assets, onUpdate }) => {
       }
   };
 
+  // Library Management
+  const handleAddLibrary = () => {
+      if (!newLibName || !newLibUrl) {
+          alert('Preencha o nome e o link da biblioteca.');
+          return;
+      }
+      const newLib: ExternalLibrary = {
+          id: Date.now().toString(),
+          name: newLibName,
+          url: newLibUrl.startsWith('http') ? newLibUrl : `https://${newLibUrl}`
+      };
+      const updated = [...libraries, newLib];
+      Storage.saveCollection('external_libraries', updated);
+      setLibraries(updated);
+      setNewLibName('');
+      setNewLibUrl('');
+  };
+
+  const handleDeleteLibrary = (id: string) => {
+      if (confirm('Remover este link?')) {
+          const updated = libraries.filter(l => l.id !== id);
+          Storage.saveCollection('external_libraries', updated);
+          setLibraries(updated);
+      }
+  };
+
   const getIcon = (type: string) => {
       switch(type) {
           case 'Audiobook': return <Headphones size={20} className="text-purple-500"/>;
@@ -75,54 +132,88 @@ const DigitalAssets: React.FC<DigitalAssetsProps> = ({ assets, onUpdate }) => {
       }
   };
 
-  const freeLibraries = [
-      { name: 'Domínio Público', url: 'http://www.dominiopublico.gov.br/' },
-      { name: 'Project Gutenberg', url: 'https://www.gutenberg.org/' },
-      { name: 'Open Library', url: 'https://openlibrary.org/' },
-      { name: 'Biblioteca Digital Mundial', url: 'https://www.wdl.org/pt/' },
-      { name: 'Machado de Assis - MEC', url: 'http://machado.mec.gov.br/' }
-  ];
-
   return (
     <div className="space-y-6 animate-fade-in">
         <div className="flex flex-col space-y-2">
             <h2 className="text-xl font-medium text-gray-600">Acervo Digital</h2>
             <div className="flex flex-wrap gap-2">
-                <button 
-                    onClick={() => { setFormData({}); setView('form'); }}
-                    className={`px-4 py-2 rounded text-white text-sm font-medium flex items-center ${view === 'form' ? 'bg-teal-600' : 'bg-primary hover:bg-primaryDark'}`}
-                >
-                    <Plus size={16} className="mr-2"/> Novo Arquivo
-                </button>
+                {isAdmin && (
+                    <button 
+                        onClick={() => { setFormData({}); setView('form'); }}
+                        className={`px-4 py-2 rounded text-white text-sm font-medium flex items-center ${view === 'form' ? 'bg-teal-600' : 'bg-primary hover:bg-primaryDark'}`}
+                    >
+                        <Plus size={16} className="mr-2"/> Novo Arquivo
+                    </button>
+                )}
                 <button 
                     onClick={() => setView('list')}
                     className={`px-4 py-2 rounded text-white text-sm font-medium ${view === 'list' ? 'bg-blue-700' : 'bg-secondary hover:bg-blue-600'}`}
                 >
                     Biblioteca Digital
                 </button>
-                <button 
-                    onClick={() => setView('search')}
-                    className={`px-4 py-2 rounded text-white text-sm font-medium flex items-center ${view === 'search' ? 'bg-indigo-600' : 'bg-indigo-500 hover:bg-indigo-600'}`}
-                >
-                    <Search size={16} className="mr-2"/> Pesquisa Online
-                </button>
+                {isAdmin && (
+                    <button 
+                        onClick={() => setView('search')}
+                        className={`px-4 py-2 rounded text-white text-sm font-medium flex items-center ${view === 'search' ? 'bg-indigo-600' : 'bg-indigo-500 hover:bg-indigo-600'}`}
+                    >
+                        <Search size={16} className="mr-2"/> Pesquisa Online
+                    </button>
+                )}
             </div>
         </div>
 
         {/* Free Libraries Links */}
         <div className="bg-white p-4 rounded shadow-sm border border-gray-200">
-            <h3 className="text-sm font-bold text-gray-500 uppercase mb-3">Bibliotecas Gratuitas</h3>
-            <div className="flex flex-wrap gap-3">
-                {freeLibraries.map(lib => (
-                    <a 
-                        key={lib.name} 
-                        href={lib.url} 
-                        target="_blank" 
-                        rel="noreferrer" 
-                        className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs flex items-center border"
+            <div className="flex justify-between items-start mb-3">
+                <h3 className="text-sm font-bold text-gray-500 uppercase">Bibliotecas Gratuitas</h3>
+            </div>
+            
+            {/* Admin Add Library Form */}
+            {isAdmin && (
+                <div className="flex flex-col md:flex-row gap-2 mb-4 bg-gray-50 p-2 rounded border border-gray-100">
+                    <input 
+                        className="border p-2 rounded bg-white text-gray-700 text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-primary"
+                        placeholder="Nome da Biblioteca"
+                        value={newLibName}
+                        onChange={e => setNewLibName(e.target.value)}
+                    />
+                    <input 
+                        className="border p-2 rounded bg-white text-gray-700 text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-primary"
+                        placeholder="Link (URL)"
+                        value={newLibUrl}
+                        onChange={e => setNewLibUrl(e.target.value)}
+                    />
+                    <button 
+                        onClick={handleAddLibrary}
+                        className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 flex items-center justify-center"
                     >
-                        {lib.name} <ExternalLink size={10} className="ml-1"/>
-                    </a>
+                        <Plus size={14} className="mr-1"/> Adicionar
+                    </button>
+                </div>
+            )}
+
+            <div className="flex flex-wrap gap-3">
+                {libraries.length === 0 && <p className="text-xs text-gray-400 italic">Nenhuma biblioteca externa cadastrada.</p>}
+                {libraries.map(lib => (
+                    <div key={lib.id} className="relative group">
+                        <a 
+                            href={lib.url} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs flex items-center border pr-4"
+                        >
+                            {lib.name} <ExternalLink size={10} className="ml-1"/>
+                        </a>
+                        {isAdmin && (
+                            <button 
+                                onClick={(e) => { e.preventDefault(); handleDeleteLibrary(lib.id); }}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                title="Remover"
+                            >
+                                <X size={10} />
+                            </button>
+                        )}
+                    </div>
                 ))}
             </div>
         </div>
@@ -139,8 +230,8 @@ const DigitalAssets: React.FC<DigitalAssetsProps> = ({ assets, onUpdate }) => {
                                 <th className="px-4 py-3 text-center">Tipo</th>
                                 <th className="px-4 py-3">Título</th>
                                 <th className="px-4 py-3">Categoria</th>
-                                <th className="px-4 py-3">Link</th>
-                                <th className="px-4 py-3 text-center">Ações</th>
+                                <th className="px-4 py-3 text-center">Acesso</th>
+                                {isAdmin && <th className="px-4 py-3 text-center">Ações</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -149,20 +240,27 @@ const DigitalAssets: React.FC<DigitalAssetsProps> = ({ assets, onUpdate }) => {
                                     <td className="px-4 py-3 text-center flex justify-center">{getIcon(asset.type)}</td>
                                     <td className="px-4 py-3 font-medium text-gray-800">{asset.title}</td>
                                     <td className="px-4 py-3">{asset.category}</td>
-                                    <td className="px-4 py-3">
-                                        <a href={asset.url} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline flex items-center">
-                                            Acessar <ExternalLink size={12} className="ml-1"/>
+                                    <td className="px-4 py-3 text-center">
+                                        <a 
+                                            href={asset.url} 
+                                            target="_blank" 
+                                            rel="noreferrer" 
+                                            className="inline-flex items-center justify-center px-4 py-1.5 bg-teal-500 text-white rounded hover:bg-teal-600 text-xs font-medium transition-colors"
+                                        >
+                                            Abrir Arquivo <ExternalLink size={12} className="ml-2"/>
                                         </a>
                                     </td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex justify-center space-x-2">
-                                            <button onClick={() => { setFormData(asset); setView('form'); }} className="p-1.5 bg-yellow-400 text-white rounded hover:bg-yellow-500"><Edit size={14}/></button>
-                                            <button onClick={() => handleDelete(asset.id)} className="p-1.5 bg-danger text-white rounded hover:bg-red-600"><Trash2 size={14}/></button>
-                                        </div>
-                                    </td>
+                                    {isAdmin && (
+                                        <td className="px-4 py-3">
+                                            <div className="flex justify-center space-x-2">
+                                                <button onClick={() => { setFormData(asset); setView('form'); }} className="p-1.5 bg-yellow-400 text-white rounded hover:bg-yellow-500"><Edit size={14}/></button>
+                                                <button onClick={() => handleDelete(asset.id)} className="p-1.5 bg-danger text-white rounded hover:bg-red-600"><Trash2 size={14}/></button>
+                                            </div>
+                                        </td>
+                                    )}
                                 </tr>
                             )) : (
-                                <tr><td colSpan={5} className="p-8 text-center text-gray-400">Nenhum arquivo digital cadastrado.</td></tr>
+                                <tr><td colSpan={isAdmin ? 5 : 4} className="p-8 text-center text-gray-400">Nenhum arquivo digital cadastrado.</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -203,13 +301,29 @@ const DigitalAssets: React.FC<DigitalAssetsProps> = ({ assets, onUpdate }) => {
                         />
                     </div>
                     <div className="col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">URL de Acesso / Link do Arquivo *</label>
-                        <input 
-                            className="w-full border p-2 rounded bg-white text-gray-700 focus:ring-2 focus:ring-primary focus:outline-none"
-                            placeholder="https://drive.google.com/..."
-                            value={formData.url || ''}
-                            onChange={e => setFormData({...formData, url: e.target.value})}
-                        />
+                        <label className="block text-sm font-medium text-gray-700 mb-1">URL de Acesso ou Arquivo (Upload) *</label>
+                        <div className="flex gap-2">
+                            <input 
+                                className="flex-1 border p-2 rounded bg-white text-gray-700 focus:ring-2 focus:ring-primary focus:outline-none"
+                                placeholder="Cole um link ou faça upload ao lado..."
+                                value={formData.url || ''}
+                                onChange={e => setFormData({...formData, url: e.target.value})}
+                            />
+                            <button 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700 flex items-center transition-colors flex-shrink-0"
+                            >
+                                <Upload size={16} className="mr-2"/> Carregar PDF
+                            </button>
+                            <input 
+                                type="file" 
+                                ref={fileInputRef} 
+                                className="hidden" 
+                                accept="application/pdf,audio/*,application/epub+zip" 
+                                onChange={handleFileChange} 
+                            />
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-1">Suporta links externos (Drive, YouTube) ou arquivos locais pequenos (PDF).</p>
                     </div>
                  </div>
                  <div className="mt-6 flex justify-end space-x-2">

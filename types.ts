@@ -62,6 +62,12 @@ export interface DigitalAsset {
   coverUrl?: string;
 }
 
+export interface ExternalLibrary {
+  id: string;
+  name: string;
+  url: string;
+}
+
 export interface ClassSector {
   id: string;
   name: string;
@@ -71,6 +77,8 @@ export interface AppSettings {
   institutionName: string;
   address: string;
   logoUrl: string;
+  instagramUrl?: string;
+  facebookUrl?: string;
   bookColumns: {
     format: boolean;
     isbn: boolean;
@@ -100,5 +108,13 @@ export interface Notification {
   message: string;
   type: 'info' | 'warning' | 'danger';
   isRead: boolean;
+  date: string;
+}
+
+export interface Notice {
+  id: string;
+  title: string;
+  content: string;
+  type: 'info' | 'warning' | 'danger';
   date: string;
 }

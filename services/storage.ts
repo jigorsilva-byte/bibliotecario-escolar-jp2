@@ -1,10 +1,10 @@
 
-import { Book, User, Loan, DigitalAsset, AppSettings, UserRole, Notification, ClassSector, BookFormat } from '../types';
+import { Book, User, Loan, DigitalAsset, AppSettings, UserRole, Notification, ClassSector, BookFormat, Notice, ExternalLibrary } from '../types';
 
 // Mock Data for initial load
 const INITIAL_USERS: User[] = [
   { id: '1', name: 'José Igor', email: 'admin@escola.com', password: '123', role: UserRole.ADMIN, phone: '(84) 98738-4620', type: 'Funcionário', photoUrl: 'https://picsum.photos/100/100', mustChangePassword: false },
-  { id: '2', name: 'Maria Silva', email: 'aluno@escola.com', password: '123', role: UserRole.USER, phone: '(11) 99999-9999', type: 'Aluno', sectorOrClass: '3º Ano A', mustChangePassword: true },
+  { id: '2', name: 'Maria Silva', email: 'aluno@escola.com', password: '123', role: UserRole.USER, phone: '(11) 99999-9999', type: 'Aluno', sectorOrClass: '3º Ano A', mustChangePassword: false },
 ];
 
 const INITIAL_FORMATS: BookFormat[] = [
@@ -38,10 +38,25 @@ const INITIAL_ASSETS: DigitalAsset[] = [
   { id: '2', title: 'Audiobook: Harry Potter', type: 'Audiobook', category: 'Fantasia', url: '#', coverUrl: 'https://picsum.photos/100/140?random=11' },
 ];
 
+const INITIAL_EXTERNAL_LIBRARIES: ExternalLibrary[] = [
+    { id: '1', name: 'Domínio Público', url: 'http://www.dominiopublico.gov.br/' },
+    { id: '2', name: 'Project Gutenberg', url: 'https://www.gutenberg.org/' },
+    { id: '3', name: 'Open Library', url: 'https://openlibrary.org/' },
+    { id: '4', name: 'Biblioteca Digital Mundial', url: 'https://www.wdl.org/pt/' },
+    { id: '5', name: 'Machado de Assis - MEC', url: 'http://machado.mec.gov.br/' }
+];
+
+const INITIAL_NOTICES: Notice[] = [
+    { id: '1', title: 'Backup Pendente', content: 'Realize o backup do sistema para evitar perda de dados.', type: 'warning', date: new Date().toISOString().split('T')[0] },
+    { id: '2', title: 'Atualização V3.1', content: 'Nova versão disponível. Verifique as configurações.', type: 'info', date: new Date().toISOString().split('T')[0] }
+];
+
 const INITIAL_SETTINGS: AppSettings = {
   institutionName: 'SISTEMA BIBLIOTECÁRIO ESCOLAR 3.0',
   address: 'Rua São Francisco Bairro Angrião Nº 3099',
   logoUrl: 'https://cdn-icons-png.flaticon.com/512/2232/2232688.png',
+  instagramUrl: '',
+  facebookUrl: '',
   bookColumns: {
     format: true,
     isbn: true,
@@ -106,8 +121,13 @@ export const loadInitialData = () => {
   if (!localStorage.getItem('classes')) saveCollection('classes', INITIAL_CLASSES);
   if (!localStorage.getItem('formats')) saveCollection('formats', INITIAL_FORMATS);
   if (!localStorage.getItem('notifications')) saveCollection('notifications', []);
+  if (!localStorage.getItem('notices')) saveCollection('notices', INITIAL_NOTICES);
+  if (!localStorage.getItem('external_libraries')) saveCollection('external_libraries', INITIAL_EXTERNAL_LIBRARIES);
   
   const currentSettings = getSettings();
+  // Ensure new fields exist in saved settings if updating from older version
+  if (currentSettings.instagramUrl === undefined) currentSettings.instagramUrl = '';
+  if (currentSettings.facebookUrl === undefined) currentSettings.facebookUrl = '';
   saveSettings(currentSettings); 
 };
 

@@ -1,12 +1,15 @@
-import React, { useMemo } from 'react';
-import { Book, Users, ArrowLeftRight, TabletSmartphone } from 'lucide-react';
-import { DashboardStats, Loan } from '../types';
+
+import React, { useMemo, useState, useEffect } from 'react';
+import { Book, Users, ArrowLeftRight, TabletSmartphone, Plus, Edit, Trash2, X, Save } from 'lucide-react';
+import { DashboardStats, Loan, Notice, User, UserRole } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import * as Storage from '../services/storage';
 
 interface DashboardProps {
   stats: DashboardStats;
   loans: Loan[];
   onNavigate: (page: string) => void;
+  user: User | null;
 }
 
 const StatCard = ({ title, value, label, icon: Icon, onClick, colorClass }: { title: string, value: number, label: string, icon: any, onClick: () => void, colorClass: string }) => (
@@ -25,8 +28,47 @@ const StatCard = ({ title, value, label, icon: Icon, onClick, colorClass }: { ti
   </div>
 );
 
-const Dashboard: React.FC<DashboardProps> = ({ stats, loans, onNavigate }) => {
+const Dashboard: React.FC<DashboardProps> = ({ stats, loans, onNavigate, user }) => {
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [isAddingNotice, setIsAddingNotice] = useState(false);
+  const [newNoticeData, setNewNoticeData] = useState<Partial<Notice>>({});
   
+  useEffect(() => {
+      setNotices(Storage.getCollection('notices', []));
+  }, []);
+
+  const handleSaveNotice = () => {
+      if(!newNoticeData.title || !newNoticeData.content) return;
+
+      const newNotice: Notice = {
+          id: newNoticeData.id || Date.now().toString(),
+          title: newNoticeData.title,
+          content: newNoticeData.content,
+          type: newNoticeData.type || 'info',
+          date: new Date().toISOString().split('T')[0]
+      };
+
+      let updated;
+      if (newNoticeData.id) {
+          updated = notices.map(n => n.id === newNoticeData.id ? newNotice : n);
+      } else {
+          updated = [newNotice, ...notices];
+      }
+
+      Storage.saveCollection('notices', updated);
+      setNotices(updated);
+      setIsAddingNotice(false);
+      setNewNoticeData({});
+  };
+
+  const handleDeleteNotice = (id: string) => {
+      if (confirm('Excluir este aviso?')) {
+          const updated = notices.filter(n => n.id !== id);
+          Storage.saveCollection('notices', updated);
+          setNotices(updated);
+      }
+  };
+
   // Calculate real chart data based on loans history
   const chartData = useMemo(() => {
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -101,17 +143,78 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, loans, onNavigate }) => {
                 </ResponsiveContainer>
             </div>
         </div>
-        <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
-            <h3 className="text-lg font-medium text-gray-700 mb-4">Avisos Importantes</h3>
-            <div className="space-y-4">
-                <div className="p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-700">
-                    <p className="font-bold">Backup Pendente</p>
-                    <p className="text-sm">Realize o backup do sistema para evitar perda de dados.</p>
+        
+        <div className="bg-white p-6 rounded shadow-sm border border-gray-200 flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-700">Avisos Importantes</h3>
+                {user?.role === UserRole.ADMIN && (
+                    <button 
+                        onClick={() => { setIsAddingNotice(true); setNewNoticeData({ type: 'info' }); }}
+                        className="p-1.5 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200"
+                        title="Adicionar Aviso"
+                    >
+                        <Plus size={18}/>
+                    </button>
+                )}
+            </div>
+            
+            {isAddingNotice && (
+                <div className="mb-4 p-4 border rounded bg-gray-50 space-y-3">
+                    <input 
+                        className="w-full p-2 border rounded bg-white"
+                        placeholder="Título do Aviso"
+                        value={newNoticeData.title || ''}
+                        onChange={e => setNewNoticeData({...newNoticeData, title: e.target.value})}
+                    />
+                    <textarea 
+                        className="w-full p-2 border rounded bg-white h-20"
+                        placeholder="Conteúdo do aviso..."
+                        value={newNoticeData.content || ''}
+                        onChange={e => setNewNoticeData({...newNoticeData, content: e.target.value})}
+                    />
+                    <div className="flex justify-between items-center">
+                        <select 
+                            className="p-2 border rounded bg-white text-sm"
+                            value={newNoticeData.type || 'info'}
+                            onChange={e => setNewNoticeData({...newNoticeData, type: e.target.value as any})}
+                        >
+                            <option value="info">Informação (Azul)</option>
+                            <option value="warning">Alerta (Amarelo)</option>
+                            <option value="danger">Urgente (Vermelho)</option>
+                        </select>
+                        <div className="flex space-x-2">
+                             <button onClick={() => setIsAddingNotice(false)} className="px-3 py-1 text-gray-500 hover:bg-gray-200 rounded">Cancelar</button>
+                             <button onClick={handleSaveNotice} className="px-3 py-1 bg-primary text-white rounded hover:bg-primaryDark flex items-center">
+                                 <Save size={14} className="mr-1"/> Salvar
+                             </button>
+                        </div>
+                    </div>
                 </div>
-                <div className="p-4 bg-blue-50 border-l-4 border-blue-400 text-blue-700">
-                    <p className="font-bold">Atualização V3.1</p>
-                    <p className="text-sm">Nova versão disponível. Verifique as configurações.</p>
-                </div>
+            )}
+
+            <div className="space-y-4 flex-1 overflow-y-auto max-h-[300px]">
+                {notices.length === 0 && !isAddingNotice && (
+                    <p className="text-center text-gray-400 py-8">Nenhum aviso no momento.</p>
+                )}
+                {notices.map(notice => (
+                    <div key={notice.id} className={`p-4 border-l-4 rounded relative group ${
+                        notice.type === 'warning' ? 'bg-yellow-50 border-yellow-400 text-yellow-800' :
+                        notice.type === 'danger' ? 'bg-red-50 border-red-500 text-red-800' :
+                        'bg-blue-50 border-blue-400 text-blue-800'
+                    }`}>
+                        <div className="flex justify-between items-start">
+                             <p className="font-bold">{notice.title}</p>
+                             {user?.role === UserRole.ADMIN && (
+                                 <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                     <button onClick={() => { setNewNoticeData(notice); setIsAddingNotice(true); }} className="p-1 hover:bg-white rounded"><Edit size={14}/></button>
+                                     <button onClick={() => handleDeleteNotice(notice.id)} className="p-1 hover:bg-white rounded text-red-600"><Trash2 size={14}/></button>
+                                 </div>
+                             )}
+                        </div>
+                        <p className="text-sm mt-1">{notice.content}</p>
+                        <p className="text-[10px] mt-2 opacity-70 text-right">{new Date(notice.date).toLocaleDateString()}</p>
+                    </div>
+                ))}
             </div>
         </div>
       </div>

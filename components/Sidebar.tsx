@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Home, Users, BookOpen, FileText, Settings, ChevronDown, ChevronRight, LogOut, X } from 'lucide-react';
 
@@ -123,7 +124,12 @@ const Sidebar: React.FC<SidebarProps> = ({ user, onChangePage, currentPage, onLo
           />
 
           <MenuItem id="loans" label="Empréstimos" icon={BookOpen} />
-          <MenuItem id="settings" label="Configurações" icon={Settings} />
+          
+          {/* Exibir Configurações apenas para Administradores */}
+          {user.role === 'ADMIN' && (
+            <MenuItem id="settings" label="Configurações" icon={Settings} />
+          )}
+          
           <MenuItem id="reports" label="Relatórios" icon={FileText} />
         </ul>
 

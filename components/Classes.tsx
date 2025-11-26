@@ -1,17 +1,21 @@
 
 import React, { useState } from 'react';
-import { ClassSector } from '../types';
-import { Edit, Trash2, Plus, Save, X } from 'lucide-react';
+import { ClassSector, User, UserRole } from '../types';
+import { Edit, Trash2, Plus, Save, X, LogIn, CheckCircle } from 'lucide-react';
 import * as Storage from '../services/storage';
 
 interface ClassesProps {
   classes: ClassSector[];
   onUpdate: (classes: ClassSector[]) => void;
+  currentUser: User | null;
+  onUpdateUser: (user: User) => void;
 }
 
-const Classes: React.FC<ClassesProps> = ({ classes, onUpdate }) => {
+const Classes: React.FC<ClassesProps> = ({ classes, onUpdate, currentUser, onUpdateUser }) => {
   const [view, setView] = useState<'list' | 'form'>('list');
   const [formData, setFormData] = useState<Partial<ClassSector>>({});
+
+  const isAdmin = currentUser?.role === UserRole.ADMIN;
 
   const handleSave = () => {
     if (!formData.name) return;
@@ -48,17 +52,43 @@ const Classes: React.FC<ClassesProps> = ({ classes, onUpdate }) => {
       setView('form');
   };
 
+  const handleJoinClass = (className: string) => {
+      if (!currentUser) return;
+
+      const message = currentUser.sectorOrClass
+        ? `Você já está na turma "${currentUser.sectorOrClass}". Deseja mudar para a turma "${className}"?`
+        : `Deseja ingressar na turma "${className}"?`;
+
+      if (confirm(message)) {
+          const updatedUser: User = { ...currentUser, sectorOrClass: className };
+          
+          // Update LocalStorage
+          const allUsers = Storage.getCollection<User>('users', []);
+          const updatedUsersList = allUsers.map(u => u.id === currentUser.id ? updatedUser : u);
+          Storage.saveCollection('users', updatedUsersList);
+          
+          // Update State
+          onUpdateUser(updatedUser);
+          // Alert removed to improve UX as UI update is immediate, but can be kept if desired
+          // alert(`Você ingressou na turma ${className} com sucesso!`); 
+      }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
         <div className="flex flex-col space-y-2">
-            <h2 className="text-xl font-medium text-gray-600">Gerenciar Turmas e Setores</h2>
+            <h2 className="text-xl font-medium text-gray-600">
+                {isAdmin ? 'Gerenciar Turmas e Setores' : 'Turmas Disponíveis'}
+            </h2>
             <div className="flex space-x-2">
-                <button 
-                    onClick={() => { setFormData({}); setView('form'); }}
-                    className={`px-4 py-2 rounded text-white text-sm font-medium flex items-center ${view === 'form' ? 'bg-teal-600' : 'bg-primary hover:bg-primaryDark'}`}
-                >
-                    <Plus size={16} className="mr-2"/> Novo Cadastro
-                </button>
+                {isAdmin && (
+                    <button 
+                        onClick={() => { setFormData({}); setView('form'); }}
+                        className={`px-4 py-2 rounded text-white text-sm font-medium flex items-center ${view === 'form' ? 'bg-teal-600' : 'bg-primary hover:bg-primaryDark'}`}
+                    >
+                        <Plus size={16} className="mr-2"/> Novo Cadastro
+                    </button>
+                )}
                 <button 
                     onClick={() => setView('list')}
                     className={`px-4 py-2 rounded text-white text-sm font-medium ${view === 'list' ? 'bg-blue-700' : 'bg-secondary hover:bg-blue-600'}`}
@@ -89,8 +119,25 @@ const Classes: React.FC<ClassesProps> = ({ classes, onUpdate }) => {
                                     <td className="px-4 py-3 font-bold text-gray-800">{item.name}</td>
                                     <td className="px-4 py-3 text-right">
                                         <div className="flex justify-end space-x-2">
-                                            <button onClick={() => handleEdit(item)} className="p-1.5 bg-yellow-400 text-white rounded hover:bg-yellow-500"><Edit size={14}/></button>
-                                            <button onClick={() => handleDelete(item.id)} className="p-1.5 bg-danger text-white rounded hover:bg-red-600"><Trash2 size={14}/></button>
+                                            {isAdmin ? (
+                                                <>
+                                                    <button onClick={() => handleEdit(item)} className="p-1.5 bg-yellow-400 text-white rounded hover:bg-yellow-500"><Edit size={14}/></button>
+                                                    <button onClick={() => handleDelete(item.id)} className="p-1.5 bg-danger text-white rounded hover:bg-red-600"><Trash2 size={14}/></button>
+                                                </>
+                                            ) : (
+                                                currentUser?.sectorOrClass === item.name ? (
+                                                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-green-100 text-green-800 text-xs font-bold border border-green-200">
+                                                        <CheckCircle size={12} className="mr-1"/> Matriculado
+                                                    </span>
+                                                ) : (
+                                                    <button 
+                                                        onClick={() => handleJoinClass(item.name)} 
+                                                        className="flex items-center px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
+                                                    >
+                                                        <LogIn size={14} className="mr-1"/> Ingressar
+                                                    </button>
+                                                )
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
@@ -104,26 +151,33 @@ const Classes: React.FC<ClassesProps> = ({ classes, onUpdate }) => {
         ) : (
             <div className="bg-white p-6 rounded shadow-sm border border-gray-200 max-w-lg">
                 <h3 className="text-lg font-medium text-gray-700 mb-6 border-b pb-2">{formData.id ? 'Editar' : 'Cadastrar'} Turma ou Setor</h3>
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
-                        <input 
-                            type="text" 
-                            className="w-full border p-2 rounded bg-white text-gray-700 focus:ring-2 focus:ring-primary focus:outline-none"
-                            placeholder="Ex: 3º Ano A ou Sala dos Professores"
-                            value={formData.name || ''}
-                            onChange={e => setFormData({...formData, name: e.target.value})}
-                        />
+                {!isAdmin && (
+                    <div className="p-4 mb-4 bg-red-100 text-red-700 border border-red-200 rounded">
+                        Você não tem permissão para criar turmas.
                     </div>
-                    <div className="flex justify-end space-x-2 pt-4">
-                        <button onClick={() => setView('list')} className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-50 flex items-center">
-                            <X size={16} className="mr-1"/> Cancelar
-                        </button>
-                        <button onClick={handleSave} className="px-4 py-2 bg-primary text-white rounded hover:bg-primaryDark flex items-center">
-                            <Save size={16} className="mr-1"/> Salvar
-                        </button>
+                )}
+                {isAdmin && (
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+                            <input 
+                                type="text" 
+                                className="w-full border p-2 rounded bg-white text-gray-700 focus:ring-2 focus:ring-primary focus:outline-none"
+                                placeholder="Ex: 3º Ano A ou Sala dos Professores"
+                                value={formData.name || ''}
+                                onChange={e => setFormData({...formData, name: e.target.value})}
+                            />
+                        </div>
+                        <div className="flex justify-end space-x-2 pt-4">
+                            <button onClick={() => setView('list')} className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-50 flex items-center">
+                                <X size={16} className="mr-1"/> Cancelar
+                            </button>
+                            <button onClick={handleSave} className="px-4 py-2 bg-primary text-white rounded hover:bg-primaryDark flex items-center">
+                                <Save size={16} className="mr-1"/> Salvar
+                            </button>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
         )}
     </div>

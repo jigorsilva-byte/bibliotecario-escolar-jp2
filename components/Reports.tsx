@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { Loan, Book, User } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Printer, FileText, Download, Filter } from 'lucide-react';
+import * as Storage from '../services/storage';
 
 interface ReportsProps {
   loans: Loan[];
@@ -10,7 +11,8 @@ interface ReportsProps {
   users: User[];
 }
 
-const COLORS = ['#1abc9c', '#2980b9', '#f39c12', '#e74c3c'];
+// Cores ajustadas: Index 1 (Em Atraso) agora é Vermelho (#e74c3c)
+const COLORS = ['#1abc9c', '#e74c3c', '#f39c12', '#2980b9'];
 
 const Reports: React.FC<ReportsProps> = ({ loans, books, users }) => {
   const [activeTab, setActiveTab] = useState<'geral' | 'historico'>('geral');
@@ -51,6 +53,7 @@ const Reports: React.FC<ReportsProps> = ({ loans, books, users }) => {
       .slice(0, 5);
 
     // Status Distribution
+    // A ordem aqui deve corresponder à ordem de COLORS: 0-Verde, 1-Vermelho, 2-Laranja
     const statusData = [
       { name: 'Devolvidos', value: returned },
       { name: 'Em Atraso', value: late },
@@ -62,8 +65,79 @@ const Reports: React.FC<ReportsProps> = ({ loans, books, users }) => {
 
   const uniqueCategories = Array.from(new Set(books.map(b => b.category)));
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrintReport = () => {
+    const settings = Storage.getSettings();
+    const printWindow = window.open('', '', 'height=600,width=900');
+    
+    if (printWindow) {
+        printWindow.document.write('<html><head><title>Relatório Gerencial</title>');
+        printWindow.document.write(`
+            <style>
+                body { font-family: sans-serif; padding: 20px; }
+                h1 { text-align: center; font-size: 18px; margin-bottom: 5px; }
+                h2 { text-align: center; font-size: 14px; color: #666; margin-top: 0; margin-bottom: 20px; }
+                .summary { display: flex; justify-content: space-around; margin-bottom: 30px; border-bottom: 1px solid #eee; padding-bottom: 20px; }
+                .summary-item { text-align: center; }
+                .summary-val { font-size: 24px; font-weight: bold; }
+                .summary-label { font-size: 12px; color: #666; text-transform: uppercase; }
+                table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                .red { color: #e74c3c; }
+                .green { color: #1abc9c; }
+                .blue { color: #2980b9; }
+            </style>
+        `);
+        printWindow.document.write('</head><body>');
+        printWindow.document.write(`<h1>${settings.institutionName}</h1>`);
+        printWindow.document.write(`<h2>Relatório Gerencial - Gerado em ${new Date().toLocaleDateString()}</h2>`);
+        
+        if (activeTab === 'geral') {
+            printWindow.document.write(`
+                <div class="summary">
+                    <div class="summary-item">
+                        <div class="summary-val blue">${stats.totalLoans}</div>
+                        <div class="summary-label">Total Empréstimos</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-val green">${stats.returned}</div>
+                        <div class="summary-label">Devolvidos</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-val red">${stats.late}</div>
+                        <div class="summary-label">Em Atraso</div>
+                    </div>
+                </div>
+                <h3>Livros Mais Emprestados</h3>
+                <ul>
+                    ${stats.topBooks.map(b => `<li><strong>${b.name}</strong>: ${b.count} empréstimos</li>`).join('')}
+                </ul>
+            `);
+        } else {
+            printWindow.document.write('<table>');
+            printWindow.document.write('<thead><tr><th>Data</th><th>Usuário</th><th>Livro</th><th>Situação</th></tr></thead>');
+            printWindow.document.write('<tbody>');
+            filteredLoans.forEach(loan => {
+                printWindow.document.write(`
+                    <tr>
+                        <td>${new Date(loan.loanDate).toLocaleDateString()}</td>
+                        <td>${loan.userName}</td>
+                        <td>${loan.bookTitle}</td>
+                        <td>${loan.status}</td>
+                    </tr>
+                `);
+            });
+            printWindow.document.write('</tbody></table>');
+        }
+        
+        printWindow.document.write('</body></html>');
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 500);
+    }
   };
 
   const handleExportCSV = () => {
@@ -119,7 +193,7 @@ const Reports: React.FC<ReportsProps> = ({ loans, books, users }) => {
                 </select>
              </div>
              <div className="w-full md:w-auto flex-1 flex justify-end gap-2">
-                <button onClick={handlePrint} className="flex items-center px-3 py-2 bg-gray-600 text-white rounded text-sm hover:bg-gray-700">
+                <button onClick={handlePrintReport} className="flex items-center px-3 py-2 bg-gray-600 text-white rounded text-sm hover:bg-gray-700">
                     <Printer size={16} className="mr-2"/> Imprimir
                 </button>
                 <button onClick={handleExportCSV} className="flex items-center px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700">

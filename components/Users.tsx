@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo } from 'react';
 import { User, UserRole, AppSettings } from '../types';
-import { Edit, Trash2, CreditCard, Save, X, Printer, Users as UsersIcon, FileText, Upload, User as UserIconSVG, Filter } from 'lucide-react';
+import { Edit, Trash2, CreditCard, Save, X, Printer, Users as UsersIcon, FileText, Upload, User as UserIconSVG, Filter, Download, AlertCircle } from 'lucide-react';
 import * as Storage from '../services/storage';
 
 interface UsersProps {
@@ -25,6 +25,14 @@ const Users: React.FC<UsersProps> = ({ users: initialUsers, settings, currentUse
   const [cardFilterClass, setCardFilterClass] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isAdmin = currentUser?.role === UserRole.ADMIN;
+
+  // Filter users based on role: Admin sees all, User sees only themselves
+  const visibleUsers = useMemo(() => {
+      if (isAdmin) return users;
+      return users.filter(u => u.id === currentUser?.id);
+  }, [users, isAdmin, currentUser]);
 
   const handleSave = () => {
       if(!formData.name || !formData.email) return;
@@ -90,12 +98,23 @@ const Users: React.FC<UsersProps> = ({ users: initialUsers, settings, currentUse
   };
 
   const handleEdit = (user: User) => {
+      // Security check
+      if (!isAdmin && user.id !== currentUser?.id) {
+          alert("Permissão negada.");
+          return;
+      }
       setFormData(user);
       setView('form');
   };
 
   const handleDelete = (id: string) => {
-      if(confirm('Tem certeza que deseja excluir?')) {
+      // Security check
+      if (!isAdmin && id !== currentUser?.id) {
+          alert("Permissão negada.");
+          return;
+      }
+
+      if(confirm('Tem certeza que deseja excluir este registro?')) {
           const updated = users.filter(u => u.id !== id);
           Storage.saveCollection('users', updated);
           setUsers(updated);
@@ -122,31 +141,54 @@ const Users: React.FC<UsersProps> = ({ users: initialUsers, settings, currentUse
     }
   };
 
-  // Filter users for bulk card printing
+  const handleExportCSV = () => {
+    const headers = "ID,Nome,Email,Senha,Telefone,Tipo,Turma/Setor,Perfil\n";
+    const rows = visibleUsers.map(u => 
+        `${u.id},"${u.name}",${u.email},${u.password || ''},"${u.phone}",${u.type},"${u.sectorOrClass || ''}",${u.role}`
+    ).join("\n");
+    
+    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'usuarios_biblioteca.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Filter users for bulk card printing based on visibility
   const usersForCards = useMemo(() => {
-      if (!cardFilterClass) return users;
-      return users.filter(u => u.sectorOrClass?.toLowerCase().includes(cardFilterClass.toLowerCase()));
-  }, [users, cardFilterClass]);
+      if (!isAdmin && currentUser) return [currentUser]; // Non-admin only sees self card
+      if (!cardFilterClass) return visibleUsers;
+      return visibleUsers.filter(u => u.sectorOrClass?.toLowerCase().includes(cardFilterClass.toLowerCase()));
+  }, [visibleUsers, cardFilterClass, isAdmin, currentUser]);
 
   const uniqueClasses = Array.from(new Set(users.map(u => u.sectorOrClass).filter(Boolean)));
 
   return (
     <div className="space-y-6 animate-fade-in relative">
       <div className="flex flex-col space-y-2">
-        <h2 className="text-xl font-medium text-gray-600">Cadastrar/Editar/Listar Usuários</h2>
+        <h2 className="text-xl font-medium text-gray-600">
+            {isAdmin ? 'Cadastrar/Editar/Listar Usuários' : 'Meus Dados'}
+        </h2>
         <div className="flex flex-wrap gap-2">
-          <button 
-            onClick={() => { setFormData({}); setView('form'); }}
-            className={`px-4 py-2 rounded text-white text-sm font-medium ${view === 'form' ? 'bg-teal-600' : 'bg-primary hover:bg-primaryDark'}`}
-          >
-            Novo Cadastro Individual
-          </button>
-          <button 
-            onClick={() => setView('bulk')}
-            className={`px-4 py-2 rounded text-white text-sm font-medium ${view === 'bulk' ? 'bg-cyan-600' : 'bg-cyan-500 hover:bg-cyan-600'}`}
-          >
-            Novo Cadastro Lista
-          </button>
+          {isAdmin && (
+              <>
+                <button 
+                    onClick={() => { setFormData({}); setView('form'); }}
+                    className={`px-4 py-2 rounded text-white text-sm font-medium ${view === 'form' ? 'bg-teal-600' : 'bg-primary hover:bg-primaryDark'}`}
+                >
+                    Novo Cadastro Individual
+                </button>
+                <button 
+                    onClick={() => setView('bulk')}
+                    className={`px-4 py-2 rounded text-white text-sm font-medium ${view === 'bulk' ? 'bg-cyan-600' : 'bg-cyan-500 hover:bg-cyan-600'}`}
+                >
+                    Novo Cadastro Lista
+                </button>
+              </>
+          )}
           <button 
              onClick={() => setView('list')}
              className={`px-4 py-2 rounded text-white text-sm font-medium ${view === 'list' ? 'bg-blue-700' : 'bg-blue-700 hover:bg-blue-800'}`}
@@ -157,8 +199,17 @@ const Users: React.FC<UsersProps> = ({ users: initialUsers, settings, currentUse
              onClick={() => setView('cards')}
              className={`px-4 py-2 rounded text-white text-sm font-medium flex items-center ${view === 'cards' ? 'bg-orange-600' : 'bg-orange-500 hover:bg-orange-600'}`}
           >
-             <CreditCard size={16} className="mr-2"/> Carteiras
+             <CreditCard size={16} className="mr-2"/> {isAdmin ? 'Carteiras' : 'Minha Carteira'}
           </button>
+          {isAdmin && (
+              <button 
+                onClick={handleExportCSV}
+                className="px-4 py-2 rounded text-white text-sm font-medium flex items-center bg-green-600 hover:bg-green-700"
+                title="Exportar lista para CSV"
+              >
+                <Download size={16} className="mr-2"/> Exportar CSV
+              </button>
+          )}
         </div>
       </div>
 
@@ -182,7 +233,7 @@ const Users: React.FC<UsersProps> = ({ users: initialUsers, settings, currentUse
                     </tr>
                 </thead>
                 <tbody>
-                    {users.map((user, idx) => (
+                    {visibleUsers.map((user, idx) => (
                         <tr key={user.id} className="bg-white border-b hover:bg-gray-50">
                             <td className="px-4 py-3 font-medium">{idx + 1}</td>
                             <td className="px-4 py-3 font-bold text-gray-800">{user.name}</td>
@@ -194,7 +245,7 @@ const Users: React.FC<UsersProps> = ({ users: initialUsers, settings, currentUse
                                 <div className="flex justify-center space-x-1">
                                     <button 
                                         onClick={() => handleGenerateCard(user)}
-                                        title="Gerar Carteirinha Individual"
+                                        title="Gerar Carteirinha"
                                         className="p-1.5 bg-orange-400 text-white rounded hover:bg-orange-500"
                                     >
                                         <CreditCard size={14}/>
@@ -205,6 +256,11 @@ const Users: React.FC<UsersProps> = ({ users: initialUsers, settings, currentUse
                             </td>
                         </tr>
                     ))}
+                    {visibleUsers.length === 0 && (
+                        <tr>
+                            <td colSpan={7} className="p-4 text-center text-gray-400">Nenhum registro encontrado.</td>
+                        </tr>
+                    )}
                 </tbody>
              </table>
           </div>
@@ -215,19 +271,21 @@ const Users: React.FC<UsersProps> = ({ users: initialUsers, settings, currentUse
           <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
               <div className="flex justify-between items-center mb-6 border-b pb-4 no-print">
                   <h3 className="text-lg font-medium text-gray-700 flex items-center">
-                      <CreditCard className="mr-2" /> Impressão de Carteirinhas em Lote
+                      <CreditCard className="mr-2" /> {isAdmin ? 'Impressão de Carteirinhas em Lote' : 'Minha Carteirinha'}
                   </h3>
                   <div className="flex gap-4">
-                      <select 
-                        className="border p-2 rounded bg-white text-gray-700 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-                        value={cardFilterClass}
-                        onChange={(e) => setCardFilterClass(e.target.value)}
-                      >
-                          <option value="">Todas as Turmas</option>
-                          {uniqueClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
+                      {isAdmin && (
+                          <select 
+                            className="border p-2 rounded bg-white text-gray-700 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                            value={cardFilterClass}
+                            onChange={(e) => setCardFilterClass(e.target.value)}
+                          >
+                              <option value="">Todas as Turmas</option>
+                              {uniqueClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                      )}
                       <button onClick={() => window.print()} className="bg-primary text-white px-4 py-2 rounded hover:bg-primaryDark flex items-center">
-                          <Printer size={16} className="mr-2"/> Imprimir Página
+                          <Printer size={16} className="mr-2"/> Imprimir
                       </button>
                   </div>
               </div>
@@ -313,6 +371,7 @@ const Users: React.FC<UsersProps> = ({ users: initialUsers, settings, currentUse
                         className="w-full border p-2 rounded bg-white text-gray-700 focus:ring-2 focus:ring-primary focus:outline-none"
                         value={formData.email || ''}
                         onChange={e => setFormData({...formData, email: e.target.value})}
+                        disabled={!isAdmin && !!formData.id} // User cannot change their own email here, typically handled in Profile
                      />
                  </div>
                  <div>
@@ -339,6 +398,7 @@ const Users: React.FC<UsersProps> = ({ users: initialUsers, settings, currentUse
                         className="w-full border p-2 rounded bg-white text-gray-700 focus:ring-2 focus:ring-primary focus:outline-none"
                         value={formData.type || 'Aluno'}
                         onChange={e => setFormData({...formData, type: e.target.value as any})}
+                        disabled={!isAdmin}
                      >
                          <option value="Aluno">Aluno</option>
                          <option value="Professor">Professor</option>
@@ -351,6 +411,7 @@ const Users: React.FC<UsersProps> = ({ users: initialUsers, settings, currentUse
                         className="w-full border p-2 rounded bg-white text-gray-700 focus:ring-2 focus:ring-primary focus:outline-none"
                         value={formData.sectorOrClass || ''}
                         onChange={e => setFormData({...formData, sectorOrClass: e.target.value})}
+                        disabled={!isAdmin}
                      />
                  </div>
                  <div>
@@ -358,8 +419,8 @@ const Users: React.FC<UsersProps> = ({ users: initialUsers, settings, currentUse
                      <select 
                         className="w-full border p-2 rounded bg-white text-gray-700 focus:ring-2 focus:ring-primary focus:outline-none"
                         value={formData.role || UserRole.USER}
-                        disabled={currentUser?.role !== UserRole.ADMIN}
-                        title={currentUser?.role !== UserRole.ADMIN ? "Apenas administradores podem alterar isso" : ""}
+                        disabled={!isAdmin}
+                        title={!isAdmin ? "Apenas administradores podem alterar isso" : ""}
                         onChange={e => setFormData({...formData, role: e.target.value as UserRole})}
                      >
                          <option value={UserRole.USER}>Usuário Comum (Leitor)</option>
@@ -373,13 +434,13 @@ const Users: React.FC<UsersProps> = ({ users: initialUsers, settings, currentUse
                     <X size={16} className="mr-1"/> Cancelar
                 </button>
                 <button onClick={handleSave} className="px-4 py-2 bg-primary text-white rounded hover:bg-primaryDark flex items-center">
-                    <Save size={16} className="mr-1"/> Salvar Usuário
+                    <Save size={16} className="mr-1"/> Salvar
                 </button>
              </div>
         </div>
       )}
 
-      {view === 'bulk' && (
+      {view === 'bulk' && isAdmin && (
          <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
              <h3 className="text-lg font-medium text-gray-700 mb-2 border-b pb-2 flex items-center">
                  <UsersIcon className="mr-2" /> Cadastro em Lote (Lista)

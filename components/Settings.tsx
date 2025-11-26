@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { AppSettings } from '../types';
 import * as Storage from '../services/storage';
+import { Facebook, Instagram } from 'lucide-react';
 
 interface SettingsProps {
   settings: AppSettings;
@@ -51,6 +52,32 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdate }) => {
                         onChange={e => setForm({...form, address: e.target.value})}
                     />
                 </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                            <Instagram size={16} className="mr-2 text-pink-600"/> Instagram (URL)
+                        </label>
+                        <input 
+                            className="w-full border p-2 rounded bg-white text-gray-700 focus:ring-2 focus:ring-primary focus:outline-none"
+                            value={form.instagramUrl || ''}
+                            placeholder="https://instagram.com/..."
+                            onChange={e => setForm({...form, instagramUrl: e.target.value})}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                            <Facebook size={16} className="mr-2 text-blue-600"/> Facebook (URL)
+                        </label>
+                        <input 
+                            className="w-full border p-2 rounded bg-white text-gray-700 focus:ring-2 focus:ring-primary focus:outline-none"
+                            value={form.facebookUrl || ''}
+                            placeholder="https://facebook.com/..."
+                            onChange={e => setForm({...form, facebookUrl: e.target.value})}
+                        />
+                    </div>
+                </div>
+
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Logo da Instituição (URL)</label>
                     <div className="flex gap-4 items-center">

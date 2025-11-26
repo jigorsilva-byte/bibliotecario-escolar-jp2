@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, Bell, Check, Mail, ChevronDown, User as UserIcon, LogOut, RefreshCw } from 'lucide-react';
+import { Menu, Bell, Check, ChevronDown, LogOut, RefreshCw, Instagram, Facebook } from 'lucide-react';
 import { AppSettings, User, Notification } from '../types';
 import * as Storage from '../services/storage';
 
@@ -47,7 +47,7 @@ const TopBar: React.FC<TopBarProps> = ({ settings, user, onToggleSidebar, onLogo
   };
 
   return (
-    <header className="bg-white shadow-sm h-16 flex items-center justify-between px-4 md:px-6 fixed top-0 right-0 left-0 md:left-64 z-30 transition-all duration-300">
+    <header className="bg-white shadow-sm h-16 flex items-center justify-between px-4 md:px-6 fixed top-0 right-0 left-0 md:left-64 z-30 transition-all duration-300 print:hidden">
       <div className="flex items-center">
         <button 
           onClick={onToggleSidebar}
@@ -57,15 +57,37 @@ const TopBar: React.FC<TopBarProps> = ({ settings, user, onToggleSidebar, onLogo
         </button>
         <div className="flex items-center">
             {settings.logoUrl && (
-                <img src={settings.logoUrl} alt="Logo" className="h-6 md:h-8 w-auto mr-3" />
+                <img src={settings.logoUrl} alt="Logo" className="h-8 md:h-10 w-auto mr-3 object-contain" />
             )}
-            <h1 className="text-base md:text-xl font-semibold text-gray-700 uppercase tracking-tight truncate max-w-[150px] md:max-w-none">
-              {settings.institutionName}
-            </h1>
+            <div className="flex flex-col justify-center">
+                <h1 className="text-sm md:text-lg font-bold text-gray-800 uppercase tracking-tight leading-none">
+                  {settings.institutionName}
+                </h1>
+                {settings.address && (
+                    <span className="text-[10px] md:text-xs text-gray-500 font-medium mt-0.5 hidden md:block">
+                        {settings.address}
+                    </span>
+                )}
+            </div>
         </div>
       </div>
 
       <div className="flex items-center space-x-2 md:space-x-4">
+        
+        {/* Social Icons */}
+        <div className="flex items-center space-x-2 mr-2 border-r pr-2 md:mr-4 md:pr-4">
+            {settings.instagramUrl && (
+                <a href={settings.instagramUrl} target="_blank" rel="noreferrer" className="text-pink-600 hover:text-pink-700 p-1" title="Instagram">
+                    <Instagram size={20} />
+                </a>
+            )}
+            {settings.facebookUrl && (
+                <a href={settings.facebookUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-700 p-1" title="Facebook">
+                    <Facebook size={20} />
+                </a>
+            )}
+        </div>
+
         {/* Notifications Dropdown */}
         <div className="relative">
             <button 

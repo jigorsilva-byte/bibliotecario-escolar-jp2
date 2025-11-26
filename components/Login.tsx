@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
 import { BookOpen, LogIn, Lock, User as UserIcon, UserPlus, Mail, Phone } from 'lucide-react';
@@ -104,7 +103,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <div className="bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 text-primary">
                 <BookOpen size={32} />
             </div>
-            <h1 className="text-xl font-bold text-gray-800 uppercase">Bibliotecário Escolar</h1>
+            <h1 className="text-xl font-bold text-gray-800 uppercase">Biblioteca Escolar</h1>
             <p className="text-gray-500 text-xs mt-1">Sistema de Gestão 3.0</p>
         </div>
 
